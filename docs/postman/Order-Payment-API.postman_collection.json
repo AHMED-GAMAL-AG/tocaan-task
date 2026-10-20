@@ -1,0 +1,2358 @@
+{
+    "info": {
+        "name": "Order & Payment API",
+        "description": "Extendable order and payment management API (Laravel 13, JWT).\n\n**Getting started**\n1. Set `base_url` (collection variable) to your server, e.g. `http://127.0.0.1:8000/api/v1`.\n2. Run **Authentication > Login** (demo account `demo@example.com` / `password`, after `php artisan db:seed`) or **Register**. The token is saved to `token` automatically and sent as a Bearer token by every other request.\n3. **Create order** saves `order_id`; **Process payment** saves `payment_id`.\n\n**Conventions**\n- All responses are JSON. Successful bodies are wrapped in `data`; list endpoints add `links` and `meta` (pagination).\n- Validation errors: **422** with `message` and an `errors` object keyed by field.\n- Business-rule violations: **409** with `message` and a stable machine-readable `error` code (`order_not_payable`, `order_already_paid`, `order_has_payments`, `order_locked`, `invalid_status_transition`).\n- **401** missing/invalid/expired token, **404** unknown resource *or one owned by another user*, **429** rate limit (60/min per user; 10/min per IP on login/register/refresh).\n\nEvery example response in this collection was recorded from the running API.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://127.0.0.1:8000/api/v1"
+        },
+        {
+            "key": "token",
+            "value": ""
+        },
+        {
+            "key": "order_id",
+            "value": "1"
+        },
+        {
+            "key": "payment_id",
+            "value": "1"
+        }
+    ],
+    "item": [
+        {
+            "name": "Authentication",
+            "description": "Register, log in, and manage the JWT. Every other endpoint needs `Authorization: Bearer <token>`; **Login** and **Register** store the token in the `token` collection variable automatically.",
+            "item": [
+                {
+                    "name": "Register",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "const body = pm.response.json();",
+                                    "if (body.data && body.data.access_token) {",
+                                    "    pm.collectionVariables.set(\"token\", body.data.access_token);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/register",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "register"
+                            ]
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"password\": \"secret-password\",\n    \"password_confirmation\": \"secret-password\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Create an account and receive a JWT straight away.\n\n| Field | Rules |\n|---|---|\n| `name` | required, string, max 255 |\n| `email` | required, valid email, unique |\n| `password` | required, min 8, must match `password_confirmation` |\n\nRate limited to 10 requests / minute per IP."
+                    },
+                    "response": [
+                        {
+                            "name": "Registered (201)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/register",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "register"
+                                    ]
+                                },
+                                "auth": {
+                                    "type": "noauth"
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"password\": \"secret-password\",\n    \"password_confirmation\": \"secret-password\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"access_token\": \"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...<truncated>\",\n        \"token_type\": \"bearer\",\n        \"expires_in\": 3600,\n        \"user\": {\n            \"id\": 1,\n            \"name\": \"Jane Doe\",\n            \"email\": \"jane@example.com\",\n            \"created_at\": \"2026-10-20T10:02:25+00:00\"\n        }\n    }\n}"
+                        },
+                        {
+                            "name": "Validation error (422)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/register",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "register"
+                                    ]
+                                },
+                                "auth": {
+                                    "type": "noauth"
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"\",\n    \"email\": \"not-an-email\",\n    \"password\": \"short\",\n    \"password_confirmation\": \"other\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The name field is required. (and 3 more errors)\",\n    \"errors\": {\n        \"name\": [\n            \"The name field is required.\"\n        ],\n        \"email\": [\n            \"The email field must be a valid email address.\"\n        ],\n        \"password\": [\n            \"The password field confirmation does not match.\",\n            \"The password field must be at least 8 characters.\"\n        ]\n    }\n}"
+                        },
+                        {
+                            "name": "Email already taken (422)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/register",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "register"
+                                    ]
+                                },
+                                "auth": {
+                                    "type": "noauth"
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"password\": \"secret-password\",\n    \"password_confirmation\": \"secret-password\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"An account with this email address already exists.\",\n    \"errors\": {\n        \"email\": [\n            \"An account with this email address already exists.\"\n        ]\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "const body = pm.response.json();",
+                                    "if (body.data && body.data.access_token) {",
+                                    "    pm.collectionVariables.set(\"token\", body.data.access_token);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"jane@example.com\",\n    \"password\": \"secret-password\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Exchange email + password for a JWT. `expires_in` is in seconds (`JWT_TTL`, default 60 minutes).\n\nThe seeded demo account is `demo@example.com` / `password`.\n\nRate limited to 10 requests / minute per IP."
+                    },
+                    "response": [
+                        {
+                            "name": "Logged in (200)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/login",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "login"
+                                    ]
+                                },
+                                "auth": {
+                                    "type": "noauth"
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"email\": \"jane@example.com\",\n    \"password\": \"secret-password\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"access_token\": \"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...<truncated>\",\n        \"token_type\": \"bearer\",\n        \"expires_in\": 3600,\n        \"user\": {\n            \"id\": 1,\n            \"name\": \"Jane Doe\",\n            \"email\": \"jane@example.com\",\n            \"created_at\": \"2026-10-20T10:02:25+00:00\"\n        }\n    }\n}"
+                        },
+                        {
+                            "name": "Wrong credentials (401)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/login",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "login"
+                                    ]
+                                },
+                                "auth": {
+                                    "type": "noauth"
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"email\": \"jane@example.com\",\n    \"password\": \"wrong-password\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The provided credentials are incorrect.\",\n    \"error\": \"invalid_credentials\"\n}"
+                        },
+                        {
+                            "name": "Validation error (422)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/login",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "login"
+                                    ]
+                                },
+                                "auth": {
+                                    "type": "noauth"
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"email\": \"jane\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The email field must be a valid email address. (and 1 more error)\",\n    \"errors\": {\n        \"email\": [\n            \"The email field must be a valid email address.\"\n        ],\n        \"password\": [\n            \"The password field is required.\"\n        ]\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Current user",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/me",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "me"
+                            ]
+                        },
+                        "description": "Return the user the token belongs to."
+                    },
+                    "response": [
+                        {
+                            "name": "Current user (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/me",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "me"
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 1,\n        \"name\": \"Jane Doe\",\n        \"email\": \"jane@example.com\",\n        \"created_at\": \"2026-10-20T10:02:25+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Missing or invalid token (401)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/me",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "me"
+                                    ]
+                                },
+                                "auth": {
+                                    "type": "noauth"
+                                }
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Unauthenticated.\"\n}"
+                        },
+                        {
+                            "name": "Token used after logout (401)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/me",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "me"
+                                    ]
+                                }
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Unauthenticated.\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Refresh token",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "const body = pm.response.json();",
+                                    "if (body.data && body.data.access_token) {",
+                                    "    pm.collectionVariables.set(\"token\", body.data.access_token);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/refresh",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "refresh"
+                            ]
+                        },
+                        "description": "Exchange the current token for a new one. Works for an expired token as long as it is within `JWT_REFRESH_TTL` (default 2 weeks). The old token is blacklisted."
+                    },
+                    "response": [
+                        {
+                            "name": "Refreshed (200)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/refresh",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "refresh"
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"access_token\": \"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...<truncated>\",\n        \"token_type\": \"bearer\",\n        \"expires_in\": 3600,\n        \"user\": {\n            \"id\": 1,\n            \"name\": \"Jane Doe\",\n            \"email\": \"jane@example.com\",\n            \"created_at\": \"2026-10-20T10:02:25+00:00\"\n        }\n    }\n}"
+                        },
+                        {
+                            "name": "Old or invalid token (401)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/refresh",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "refresh"
+                                    ]
+                                }
+                            },
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The token has been blacklisted\",\n    \"error\": \"invalid_token\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/logout",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "logout"
+                            ]
+                        },
+                        "description": "Invalidate (blacklist) the current token. Returns **204 No Content**."
+                    },
+                    "response": [
+                        {
+                            "name": "Logged out (204)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/auth/logout",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "auth",
+                                        "logout"
+                                    ]
+                                }
+                            },
+                            "status": "No Content",
+                            "code": 204,
+                            "_postman_previewlanguage": "text",
+                            "header": [],
+                            "body": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Orders",
+            "description": "Create, list, view, update and delete orders. Users only ever see their own orders; another user's order answers **404**.",
+            "item": [
+                {
+                    "name": "List orders",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders?status=confirmed&per_page=15&page=1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "orders"
+                            ],
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "confirmed"
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "15"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                }
+                            ]
+                        },
+                        "description": "Paginated list of **your** orders, newest first.\n\n| Query | Rules |\n|---|---|\n| `status` | optional: `pending`, `confirmed`, `cancelled` |\n| `per_page` | optional, 1-100, default 15 |\n| `page` | optional, default 1 |\n\nThe response carries Laravel's standard `links` and `meta` pagination blocks."
+                    },
+                    "response": [
+                        {
+                            "name": "Filtered by status (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders?status=confirmed&per_page=15&page=1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "confirmed"
+                                        },
+                                        {
+                                            "key": "per_page",
+                                            "value": "15"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        }
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": [\n        {\n            \"id\": 1,\n            \"status\": \"confirmed\",\n            \"customer\": {\n                \"name\": \"Jane Doe\",\n                \"email\": \"jane@example.com\",\n                \"phone\": \"+201111111111\",\n                \"address\": \"12 Nile St, Cairo\"\n            },\n            \"items\": [\n                {\n                    \"id\": 6,\n                    \"product_name\": \"Mechanical keyboard\",\n                    \"quantity\": 1,\n                    \"unit_price\": \"49.99\",\n                    \"line_total\": \"49.99\"\n                },\n                {\n                    \"id\": 7,\n                    \"product_name\": \"Mouse pad\",\n                    \"quantity\": 2,\n                    \"unit_price\": \"12.25\",\n                    \"line_total\": \"24.50\"\n                }\n            ],\n            \"total\": \"74.49\",\n            \"currency\": \"USD\",\n            \"notes\": \"Deliver after 5pm\",\n            \"payments_count\": 0,\n            \"created_at\": \"2026-10-20T10:02:27+00:00\",\n            \"updated_at\": \"2026-10-20T10:02:27+00:00\"\n        }\n    ],\n    \"links\": {\n        \"first\": \"http://127.0.0.1:8123/api/v1/orders?status=confirmed&per_page=15&page=1\",\n        \"last\": \"http://127.0.0.1:8123/api/v1/orders?status=confirmed&per_page=15&page=1\",\n        \"prev\": null,\n        \"next\": null\n    },\n    \"meta\": {\n        \"current_page\": 1,\n        \"from\": 1,\n        \"last_page\": 1,\n        \"links\": [\n            {\n                \"url\": null,\n                \"label\": \"&laquo; Previous\",\n                \"page\": null,\n                \"active\": false\n            },\n            {\n                \"url\": \"http://127.0.0.1:8123/api/v1/orders?status=confirmed&per_page=15&page=1\",\n                \"label\": \"1\",\n                \"page\": 1,\n                \"active\": true\n            },\n            {\n                \"url\": null,\n                \"label\": \"Next &raquo;\",\n                \"page\": null,\n                \"active\": false\n            }\n        ],\n        \"path\": \"http://127.0.0.1:8123/api/v1/orders\",\n        \"per_page\": 15,\n        \"to\": 1,\n        \"total\": 1\n    }\n}"
+                        },
+                        {
+                            "name": "Paginated (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders?per_page=2&page=1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "per_page",
+                                            "value": "2"
+                                        },
+                                        {
+                                            "key": "page",
+                                            "value": "1"
+                                        }
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": [\n        {\n            \"id\": 4,\n            \"status\": \"pending\",\n            \"customer\": {\n                \"name\": \"Mona Adel\",\n                \"email\": \"mona@example.com\",\n                \"phone\": null,\n                \"address\": null\n            },\n            \"items\": [\n                {\n                    \"id\": 5,\n                    \"product_name\": \"Headphones\",\n                    \"quantity\": 1,\n                    \"unit_price\": \"120.00\",\n                    \"line_total\": \"120.00\"\n                }\n            ],\n            \"total\": \"120.00\",\n            \"currency\": \"USD\",\n            \"notes\": null,\n            \"payments_count\": 0,\n            \"created_at\": \"2026-10-20T10:02:27+00:00\",\n            \"updated_at\": \"2026-10-20T10:02:27+00:00\"\n        },\n        {\n            \"id\": 3,\n            \"status\": \"pending\",\n            \"customer\": {\n                \"name\": \"Sara Hassan\",\n                \"email\": \"sara@example.com\",\n                \"phone\": null,\n                \"address\": null\n            },\n            \"items\": [\n                {\n                    \"id\": 4,\n                    \"product_name\": \"Notebook\",\n                    \"quantity\": 5,\n                    \"unit_price\": \"3.20\",\n                    \"line_total\": \"16.00\"\n                }\n            ],\n            \"total\": \"16.00\",\n            \"currency\": \"USD\",\n            \"notes\": null,\n            \"payments_count\": 0,\n            \"created_at\": \"2026-10-20T10:02:27+00:00\",\n            \"updated_at\": \"2026-10-20T10:02:27+00:00\"\n        }\n    ],\n    \"links\": {\n        \"first\": \"http://127.0.0.1:8123/api/v1/orders?per_page=2&page=1\",\n        \"last\": \"http://127.0.0.1:8123/api/v1/orders?per_page=2&page=2\",\n        \"prev\": null,\n        \"next\": \"http://127.0.0.1:8123/api/v1/orders?per_page=2&page=2\"\n    },\n    \"meta\": {\n        \"current_page\": 1,\n        \"from\": 1,\n        \"last_page\": 2,\n        \"links\": [\n            {\n                \"url\": null,\n                \"label\": \"&laquo; Previous\",\n                \"page\": null,\n                \"active\": false\n            },\n            {\n                \"url\": \"http://127.0.0.1:8123/api/v1/orders?per_page=2&page=1\",\n                \"label\": \"1\",\n                \"page\": 1,\n                \"active\": true\n            },\n            {\n                \"url\": \"http://127.0.0.1:8123/api/v1/orders?per_page=2&page=2\",\n                \"label\": \"2\",\n                \"page\": 2,\n                \"active\": false\n            },\n            {\n                \"url\": \"http://127.0.0.1:8123/api/v1/orders?per_page=2&page=2\",\n                \"label\": \"Next &raquo;\",\n                \"page\": 2,\n                \"active\": false\n            }\n        ],\n        \"path\": \"http://127.0.0.1:8123/api/v1/orders\",\n        \"per_page\": 2,\n        \"to\": 2,\n        \"total\": 4\n    }\n}"
+                        },
+                        {
+                            "name": "Invalid filter (422)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders?status=shipped&per_page=500",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "shipped"
+                                        },
+                                        {
+                                            "key": "per_page",
+                                            "value": "500"
+                                        }
+                                    ]
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The status filter must be one of: pending, confirmed, cancelled. (and 1 more error)\",\n    \"errors\": {\n        \"status\": [\n            \"The status filter must be one of: pending, confirmed, cancelled.\"\n        ],\n        \"per_page\": [\n            \"The per page field must not be greater than 100.\"\n        ]\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Create order",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    pm.collectionVariables.set(\"order_id\", pm.response.json().data.id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "orders"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"customer\": {\n        \"name\": \"Jane Doe\",\n        \"email\": \"jane@example.com\",\n        \"phone\": \"+201000000000\",\n        \"address\": \"12 Nile St, Cairo\"\n    },\n    \"items\": [\n        {\n            \"product_name\": \"Mechanical keyboard\",\n            \"quantity\": 2,\n            \"price\": 49.99\n        },\n        {\n            \"product_name\": \"USB-C cable\",\n            \"quantity\": 3,\n            \"price\": 7.5\n        }\n    ],\n    \"notes\": \"Deliver after 5pm\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Create an order. The server calculates each `line_total` and the order `total` (in integer cents, so no float rounding); any `status` or `total` sent by the client is ignored. New orders are always `pending`.\n\n| Field | Rules |\n|---|---|\n| `customer.name` | required, max 255 |\n| `customer.email` | required, valid email |\n| `customer.phone` | optional, max 30 |\n| `customer.address` | optional, max 500 |\n| `items` | required, 1-100 items |\n| `items.*.product_name` | required, max 255 |\n| `items.*.quantity` | required, integer 1-10000 |\n| `items.*.price` | required, 0.01-999999.99, max 2 decimals |\n| `notes` | optional, max 1000 |"
+                    },
+                    "response": [
+                        {
+                            "name": "Created (201)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"customer\": {\n        \"name\": \"Jane Doe\",\n        \"email\": \"jane@example.com\",\n        \"phone\": \"+201000000000\",\n        \"address\": \"12 Nile St, Cairo\"\n    },\n    \"items\": [\n        {\n            \"product_name\": \"Mechanical keyboard\",\n            \"quantity\": 2,\n            \"price\": 49.99\n        },\n        {\n            \"product_name\": \"USB-C cable\",\n            \"quantity\": 3,\n            \"price\": 7.5\n        }\n    ],\n    \"notes\": \"Deliver after 5pm\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 1,\n        \"status\": \"pending\",\n        \"customer\": {\n            \"name\": \"Jane Doe\",\n            \"email\": \"jane@example.com\",\n            \"phone\": \"+201000000000\",\n            \"address\": \"12 Nile St, Cairo\"\n        },\n        \"items\": [\n            {\n                \"id\": 1,\n                \"product_name\": \"Mechanical keyboard\",\n                \"quantity\": 2,\n                \"unit_price\": \"49.99\",\n                \"line_total\": \"99.98\"\n            },\n            {\n                \"id\": 2,\n                \"product_name\": \"USB-C cable\",\n                \"quantity\": 3,\n                \"unit_price\": \"7.50\",\n                \"line_total\": \"22.50\"\n            }\n        ],\n        \"total\": \"122.48\",\n        \"currency\": \"USD\",\n        \"notes\": \"Deliver after 5pm\",\n        \"payments_count\": 0,\n        \"created_at\": \"2026-10-20T10:02:27+00:00\",\n        \"updated_at\": \"2026-10-20T10:02:27+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Validation error (422)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"customer\": {\n        \"name\": \"Jane Doe\",\n        \"email\": \"not-an-email\"\n    },\n    \"items\": [\n        {\n            \"product_name\": \"Cable\",\n            \"quantity\": 0,\n            \"price\": 7.555\n        }\n    ]\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The customer email field must be a valid email address. (and 2 more errors)\",\n    \"errors\": {\n        \"customer.email\": [\n            \"The customer email field must be a valid email address.\"\n        ],\n        \"items.0.quantity\": [\n            \"The quantity of item #1 field must be at least 1.\"\n        ],\n        \"items.0.price\": [\n            \"The price of item #1 may have at most 2 decimal places.\"\n        ]\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get order",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{order_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "orders",
+                                "{{order_id}}"
+                            ]
+                        },
+                        "description": "One order with its items and `payments_count`."
+                    },
+                    "response": [
+                        {
+                            "name": "Order (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 1,\n        \"status\": \"pending\",\n        \"customer\": {\n            \"name\": \"Jane Doe\",\n            \"email\": \"jane@example.com\",\n            \"phone\": \"+201000000000\",\n            \"address\": \"12 Nile St, Cairo\"\n        },\n        \"items\": [\n            {\n                \"id\": 1,\n                \"product_name\": \"Mechanical keyboard\",\n                \"quantity\": 2,\n                \"unit_price\": \"49.99\",\n                \"line_total\": \"99.98\"\n            },\n            {\n                \"id\": 2,\n                \"product_name\": \"USB-C cable\",\n                \"quantity\": 3,\n                \"unit_price\": \"7.50\",\n                \"line_total\": \"22.50\"\n            }\n        ],\n        \"total\": \"122.48\",\n        \"currency\": \"USD\",\n        \"notes\": \"Deliver after 5pm\",\n        \"payments_count\": 0,\n        \"created_at\": \"2026-10-20T10:02:27+00:00\",\n        \"updated_at\": \"2026-10-20T10:02:27+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Not found (404)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/9999",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "9999"
+                                    ]
+                                }
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Order not found.\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Update order",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{order_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "orders",
+                                "{{order_id}}"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"status\": \"confirmed\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Partial update (`PUT` behaves the same). Send any of `customer` (any subset of its fields), `items` (replaces **all** items and recalculates the total), `notes`, `status`.\n\n**Status transitions:** `pending -> confirmed | cancelled`, `confirmed -> cancelled`. `cancelled` is final.\n\n**409 Conflict when:**\n- the order is cancelled (no further changes),\n- `items` is sent and the order already has any payment,\n- `status` changes while a successful or pending payment exists,\n- the transition is not allowed (`invalid_status_transition`)."
+                    },
+                    "response": [
+                        {
+                            "name": "Replace items, total recalculated (200)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"items\": [\n        {\n            \"product_name\": \"Mechanical keyboard\",\n            \"quantity\": 1,\n            \"price\": 49.99\n        },\n        {\n            \"product_name\": \"Mouse pad\",\n            \"quantity\": 2,\n            \"price\": 12.25\n        }\n    ],\n    \"customer\": {\n        \"phone\": \"+201111111111\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 1,\n        \"status\": \"pending\",\n        \"customer\": {\n            \"name\": \"Jane Doe\",\n            \"email\": \"jane@example.com\",\n            \"phone\": \"+201111111111\",\n            \"address\": \"12 Nile St, Cairo\"\n        },\n        \"items\": [\n            {\n                \"id\": 6,\n                \"product_name\": \"Mechanical keyboard\",\n                \"quantity\": 1,\n                \"unit_price\": \"49.99\",\n                \"line_total\": \"49.99\"\n            },\n            {\n                \"id\": 7,\n                \"product_name\": \"Mouse pad\",\n                \"quantity\": 2,\n                \"unit_price\": \"12.25\",\n                \"line_total\": \"24.50\"\n            }\n        ],\n        \"total\": \"74.49\",\n        \"currency\": \"USD\",\n        \"notes\": \"Deliver after 5pm\",\n        \"payments_count\": 0,\n        \"created_at\": \"2026-10-20T10:02:27+00:00\",\n        \"updated_at\": \"2026-10-20T10:02:27+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Confirm order (200)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"status\": \"confirmed\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 1,\n        \"status\": \"confirmed\",\n        \"customer\": {\n            \"name\": \"Jane Doe\",\n            \"email\": \"jane@example.com\",\n            \"phone\": \"+201111111111\",\n            \"address\": \"12 Nile St, Cairo\"\n        },\n        \"items\": [\n            {\n                \"id\": 6,\n                \"product_name\": \"Mechanical keyboard\",\n                \"quantity\": 1,\n                \"unit_price\": \"49.99\",\n                \"line_total\": \"49.99\"\n            },\n            {\n                \"id\": 7,\n                \"product_name\": \"Mouse pad\",\n                \"quantity\": 2,\n                \"unit_price\": \"12.25\",\n                \"line_total\": \"24.50\"\n            }\n        ],\n        \"total\": \"74.49\",\n        \"currency\": \"USD\",\n        \"notes\": \"Deliver after 5pm\",\n        \"payments_count\": 0,\n        \"created_at\": \"2026-10-20T10:02:27+00:00\",\n        \"updated_at\": \"2026-10-20T10:02:27+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Invalid status transition (409)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"status\": \"pending\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"An order cannot move from confirmed to pending. Allowed: cancelled.\",\n    \"error\": \"invalid_status_transition\"\n}"
+                        },
+                        {
+                            "name": "Empty body (422)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Provide at least one of: customer, items, notes, status.\",\n    \"errors\": {\n        \"order\": [\n            \"Provide at least one of: customer, items, notes, status.\"\n        ]\n    }\n}"
+                        },
+                        {
+                            "name": "Unknown status (422)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"status\": \"shipped\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The status must be one of: pending, confirmed, cancelled.\",\n    \"errors\": {\n        \"status\": [\n            \"The status must be one of: pending, confirmed, cancelled.\"\n        ]\n    }\n}"
+                        },
+                        {
+                            "name": "Cancelled order is final (409)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/2",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "2"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"status\": \"pending\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Cancelled orders cannot be modified.\",\n    \"error\": \"order_locked\"\n}"
+                        },
+                        {
+                            "name": "Paid order status locked (409)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"status\": \"cancelled\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The status of a paid order cannot be changed.\",\n    \"error\": \"order_locked\"\n}"
+                        },
+                        {
+                            "name": "Items locked after payment (409)",
+                            "originalRequest": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"items\": [\n        {\n            \"product_name\": \"Cable\",\n            \"quantity\": 1,\n            \"price\": 1\n        }\n    ]\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Items cannot be changed once a payment has been made for the order.\",\n    \"error\": \"order_locked\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete order",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{order_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "orders",
+                                "{{order_id}}"
+                            ]
+                        },
+                        "description": "Delete an order and its items. Returns **204**. Orders with **any** associated payment (even failed) cannot be deleted: **409** `order_has_payments`. The database foreign key enforces the same rule."
+                    },
+                    "response": [
+                        {
+                            "name": "Deleted (204)",
+                            "originalRequest": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/3",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "3"
+                                    ]
+                                }
+                            },
+                            "status": "No Content",
+                            "code": 204,
+                            "_postman_previewlanguage": "text",
+                            "header": [],
+                            "body": ""
+                        },
+                        {
+                            "name": "Has payments (409)",
+                            "originalRequest": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1"
+                                    ]
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Orders with associated payments cannot be deleted.\",\n    \"error\": \"order_has_payments\"\n}"
+                        },
+                        {
+                            "name": "Not found (404)",
+                            "originalRequest": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/9999",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "9999"
+                                    ]
+                                }
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Order not found.\"\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Payments",
+            "description": "Process payments through a pluggable gateway (strategy pattern) and read payment history. Payments can only be processed for **confirmed** orders.",
+            "item": [
+                {
+                    "name": "List payment methods",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/payment-methods",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "payment-methods"
+                            ]
+                        },
+                        "description": "The values accepted as `payment_method`, read from the gateway registry (`config/payments.php`). A gateway added there appears here with no other change."
+                    },
+                    "response": [
+                        {
+                            "name": "Available methods (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/payment-methods",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "payment-methods"
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": [\n        {\n            \"method\": \"credit_card\",\n            \"label\": \"Credit Card\"\n        },\n        {\n            \"method\": \"paypal\",\n            \"label\": \"PayPal\"\n        }\n    ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Process payment",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    pm.collectionVariables.set(\"payment_id\", pm.response.json().data.id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{order_id}}/payments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "orders",
+                                "{{order_id}}",
+                                "payments"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"payment_method\": \"credit_card\",\n    \"payment_details\": {\n        \"card_number\": \"4242424242424242\",\n        \"card_holder\": \"Jane Doe\",\n        \"expiry_month\": 12,\n        \"expiry_year\": 2030,\n        \"cvv\": \"123\"\n    }\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Charge an order through the gateway registered for `payment_method`. The amount is always the order total; the client cannot set it.\n\n`payment_details` is validated by **the selected gateway's own rules**, so each gateway brings its own fields:\n\n**credit_card**: `card_number` (12-19 digits, Luhn-valid), `card_holder`, `expiry_month` (1-12), `expiry_year` (4 digits), `cvv` (3-4 digits). Only brand, last 4 digits and holder name are stored.\n\n**paypal**: `paypal_email`.\n\n**Simulated outcomes**\n\n| Input | Result |\n|---|---|\n| card `4242424242424242` (or any other valid number) | `successful` |\n| card `4000000000000002` | `failed`, `card_declined` |\n| card `4000000000009995` | `failed`, `insufficient_funds` |\n| expiry in the past | `failed`, `expired_card` |\n| PayPal email starting with `declined` | `failed`, `payer_declined` |\n\nA processed attempt always returns **201** (the payment is recorded either way); read `data.status`. A failed payment can be retried; a successful or pending one blocks further attempts (**409** `order_already_paid`). Only **confirmed** orders can be paid (**409** `order_not_payable`)."
+                    },
+                    "response": [
+                        {
+                            "name": "Order not confirmed (409)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1",
+                                        "payments"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"payment_method\": \"credit_card\",\n    \"payment_details\": {\n        \"card_number\": \"4242424242424242\",\n        \"card_holder\": \"Jane Doe\",\n        \"expiry_month\": 12,\n        \"expiry_year\": 2030,\n        \"cvv\": \"123\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Payments can only be processed for confirmed orders. This order is pending.\",\n    \"error\": \"order_not_payable\"\n}"
+                        },
+                        {
+                            "name": "Gateway validation error (422)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1",
+                                        "payments"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"payment_method\": \"credit_card\",\n    \"payment_details\": {\n        \"card_number\": \"4242424242424241\",\n        \"card_holder\": \"Jane Doe\",\n        \"expiry_month\": 13,\n        \"expiry_year\": 2030,\n        \"cvv\": \"12\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The card number is not a valid card number. (and 2 more errors)\",\n    \"errors\": {\n        \"payment_details.card_number\": [\n            \"The card number is not a valid card number.\"\n        ],\n        \"payment_details.expiry_month\": [\n            \"The expiry month field must be between 1 and 12.\"\n        ],\n        \"payment_details.cvv\": [\n            \"The CVV must be 3 or 4 digits.\"\n        ]\n    }\n}"
+                        },
+                        {
+                            "name": "Unsupported method (422)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1",
+                                        "payments"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"payment_method\": \"bitcoin\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The selected payment method is not supported. Supported methods: credit_card, paypal.\",\n    \"errors\": {\n        \"payment_method\": [\n            \"The selected payment method is not supported. Supported methods: credit_card, paypal.\"\n        ]\n    }\n}"
+                        },
+                        {
+                            "name": "Card declined, recorded as failed (201)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1",
+                                        "payments"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"payment_method\": \"credit_card\",\n    \"payment_details\": {\n        \"card_number\": \"4000000000000002\",\n        \"card_holder\": \"Jane Doe\",\n        \"expiry_month\": 12,\n        \"expiry_year\": 2030,\n        \"cvv\": \"123\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 1,\n        \"order_id\": 1,\n        \"method\": \"credit_card\",\n        \"status\": \"failed\",\n        \"amount\": \"74.49\",\n        \"currency\": \"USD\",\n        \"transaction_reference\": null,\n        \"failure_reason\": \"card_declined\",\n        \"details\": {\n            \"brand\": \"visa\",\n            \"last4\": \"0002\",\n            \"card_holder\": \"Jane Doe\"\n        },\n        \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n        \"created_at\": \"2026-10-20T10:02:28+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Credit card, successful (201)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1",
+                                        "payments"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"payment_method\": \"credit_card\",\n    \"payment_details\": {\n        \"card_number\": \"4242424242424242\",\n        \"card_holder\": \"Jane Doe\",\n        \"expiry_month\": 12,\n        \"expiry_year\": 2030,\n        \"cvv\": \"123\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 2,\n        \"order_id\": 1,\n        \"method\": \"credit_card\",\n        \"status\": \"successful\",\n        \"amount\": \"74.49\",\n        \"currency\": \"USD\",\n        \"transaction_reference\": \"ch_V241AZ6ODKQXWZ9MT6OO\",\n        \"failure_reason\": null,\n        \"details\": {\n            \"brand\": \"visa\",\n            \"last4\": \"4242\",\n            \"card_holder\": \"Jane Doe\"\n        },\n        \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n        \"created_at\": \"2026-10-20T10:02:28+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Already paid (409)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1",
+                                        "payments"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"payment_method\": \"credit_card\",\n    \"payment_details\": {\n        \"card_number\": \"4242424242424242\",\n        \"card_holder\": \"Jane Doe\",\n        \"expiry_month\": 12,\n        \"expiry_year\": 2030,\n        \"cvv\": \"123\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"This order already has a successful or pending payment.\",\n    \"error\": \"order_already_paid\"\n}"
+                        },
+                        {
+                            "name": "PayPal, successful (201)",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/4/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "4",
+                                        "payments"
+                                    ]
+                                },
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"payment_method\": \"paypal\",\n    \"payment_details\": {\n        \"paypal_email\": \"jane.buyer@example.com\"\n    }\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 3,\n        \"order_id\": 4,\n        \"method\": \"paypal\",\n        \"status\": \"successful\",\n        \"amount\": \"120.00\",\n        \"currency\": \"USD\",\n        \"transaction_reference\": \"PAYID_YCNI6DMSLF7SGWVYTKLJ\",\n        \"failure_reason\": null,\n        \"details\": {\n            \"payer_email\": \"jane.buyer@example.com\",\n            \"mode\": \"sandbox\"\n        },\n        \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n        \"created_at\": \"2026-10-20T10:02:28+00:00\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "List payments of an order",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/orders/{{order_id}}/payments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "orders",
+                                "{{order_id}}",
+                                "payments"
+                            ]
+                        },
+                        "description": "Paginated payments of one order, newest first. Optional filters: `status` (`pending`, `successful`, `failed`), `method`, `per_page`, `page`."
+                    },
+                    "response": [
+                        {
+                            "name": "Payments of order (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/orders/1/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "orders",
+                                        "1",
+                                        "payments"
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": [\n        {\n            \"id\": 2,\n            \"order_id\": 1,\n            \"method\": \"credit_card\",\n            \"status\": \"successful\",\n            \"amount\": \"74.49\",\n            \"currency\": \"USD\",\n            \"transaction_reference\": \"ch_V241AZ6ODKQXWZ9MT6OO\",\n            \"failure_reason\": null,\n            \"details\": {\n                \"brand\": \"visa\",\n                \"last4\": \"4242\",\n                \"card_holder\": \"Jane Doe\"\n            },\n            \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n            \"created_at\": \"2026-10-20T10:02:28+00:00\"\n        },\n        {\n            \"id\": 1,\n            \"order_id\": 1,\n            \"method\": \"credit_card\",\n            \"status\": \"failed\",\n            \"amount\": \"74.49\",\n            \"currency\": \"USD\",\n            \"transaction_reference\": null,\n            \"failure_reason\": \"card_declined\",\n            \"details\": {\n                \"brand\": \"visa\",\n                \"last4\": \"0002\",\n                \"card_holder\": \"Jane Doe\"\n            },\n            \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n            \"created_at\": \"2026-10-20T10:02:28+00:00\"\n        }\n    ],\n    \"links\": {\n        \"first\": \"http://127.0.0.1:8123/api/v1/orders/1/payments?page=1\",\n        \"last\": \"http://127.0.0.1:8123/api/v1/orders/1/payments?page=1\",\n        \"prev\": null,\n        \"next\": null\n    },\n    \"meta\": {\n        \"current_page\": 1,\n        \"from\": 1,\n        \"last_page\": 1,\n        \"links\": [\n            {\n                \"url\": null,\n                \"label\": \"&laquo; Previous\",\n                \"page\": null,\n                \"active\": false\n            },\n            {\n                \"url\": \"http://127.0.0.1:8123/api/v1/orders/1/payments?page=1\",\n                \"label\": \"1\",\n                \"page\": 1,\n                \"active\": true\n            },\n            {\n                \"url\": null,\n                \"label\": \"Next &raquo;\",\n                \"page\": null,\n                \"active\": false\n            }\n        ],\n        \"path\": \"http://127.0.0.1:8123/api/v1/orders/1/payments\",\n        \"per_page\": 15,\n        \"to\": 2,\n        \"total\": 2\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "List all payments",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/payments?status=successful&per_page=15",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "payments"
+                            ],
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "successful"
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "15"
+                                }
+                            ]
+                        },
+                        "description": "Paginated payments across all of **your** orders, newest first.\n\n| Query | Rules |\n|---|---|\n| `status` | optional: `pending`, `successful`, `failed` |\n| `method` | optional, e.g. `credit_card` |\n| `order_id` | optional, integer |\n| `per_page` | optional, 1-100, default 15 |\n| `page` | optional |"
+                    },
+                    "response": [
+                        {
+                            "name": "All payments (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/payments",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "payments"
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": [\n        {\n            \"id\": 3,\n            \"order_id\": 4,\n            \"method\": \"paypal\",\n            \"status\": \"successful\",\n            \"amount\": \"120.00\",\n            \"currency\": \"USD\",\n            \"transaction_reference\": \"PAYID_YCNI6DMSLF7SGWVYTKLJ\",\n            \"failure_reason\": null,\n            \"details\": {\n                \"payer_email\": \"jane.buyer@example.com\",\n                \"mode\": \"sandbox\"\n            },\n            \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n            \"created_at\": \"2026-10-20T10:02:28+00:00\"\n        },\n        {\n            \"id\": 2,\n            \"order_id\": 1,\n            \"method\": \"credit_card\",\n            \"status\": \"successful\",\n            \"amount\": \"74.49\",\n            \"currency\": \"USD\",\n            \"transaction_reference\": \"ch_V241AZ6ODKQXWZ9MT6OO\",\n            \"failure_reason\": null,\n            \"details\": {\n                \"brand\": \"visa\",\n                \"last4\": \"4242\",\n                \"card_holder\": \"Jane Doe\"\n            },\n            \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n            \"created_at\": \"2026-10-20T10:02:28+00:00\"\n        },\n        {\n            \"id\": 1,\n            \"order_id\": 1,\n            \"method\": \"credit_card\",\n            \"status\": \"failed\",\n            \"amount\": \"74.49\",\n            \"currency\": \"USD\",\n            \"transaction_reference\": null,\n            \"failure_reason\": \"card_declined\",\n            \"details\": {\n                \"brand\": \"visa\",\n                \"last4\": \"0002\",\n                \"card_holder\": \"Jane Doe\"\n            },\n            \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n            \"created_at\": \"2026-10-20T10:02:28+00:00\"\n        }\n    ],\n    \"links\": {\n        \"first\": \"http://127.0.0.1:8123/api/v1/payments?page=1\",\n        \"last\": \"http://127.0.0.1:8123/api/v1/payments?page=1\",\n        \"prev\": null,\n        \"next\": null\n    },\n    \"meta\": {\n        \"current_page\": 1,\n        \"from\": 1,\n        \"last_page\": 1,\n        \"links\": [\n            {\n                \"url\": null,\n                \"label\": \"&laquo; Previous\",\n                \"page\": null,\n                \"active\": false\n            },\n            {\n                \"url\": \"http://127.0.0.1:8123/api/v1/payments?page=1\",\n                \"label\": \"1\",\n                \"page\": 1,\n                \"active\": true\n            },\n            {\n                \"url\": null,\n                \"label\": \"Next &raquo;\",\n                \"page\": null,\n                \"active\": false\n            }\n        ],\n        \"path\": \"http://127.0.0.1:8123/api/v1/payments\",\n        \"per_page\": 15,\n        \"to\": 3,\n        \"total\": 3\n    }\n}"
+                        },
+                        {
+                            "name": "Filtered (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/payments?status=failed&method=credit_card",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "failed"
+                                        },
+                                        {
+                                            "key": "method",
+                                            "value": "credit_card"
+                                        }
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": [\n        {\n            \"id\": 1,\n            \"order_id\": 1,\n            \"method\": \"credit_card\",\n            \"status\": \"failed\",\n            \"amount\": \"74.49\",\n            \"currency\": \"USD\",\n            \"transaction_reference\": null,\n            \"failure_reason\": \"card_declined\",\n            \"details\": {\n                \"brand\": \"visa\",\n                \"last4\": \"0002\",\n                \"card_holder\": \"Jane Doe\"\n            },\n            \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n            \"created_at\": \"2026-10-20T10:02:28+00:00\"\n        }\n    ],\n    \"links\": {\n        \"first\": \"http://127.0.0.1:8123/api/v1/payments?status=failed&method=credit_card&page=1\",\n        \"last\": \"http://127.0.0.1:8123/api/v1/payments?status=failed&method=credit_card&page=1\",\n        \"prev\": null,\n        \"next\": null\n    },\n    \"meta\": {\n        \"current_page\": 1,\n        \"from\": 1,\n        \"last_page\": 1,\n        \"links\": [\n            {\n                \"url\": null,\n                \"label\": \"&laquo; Previous\",\n                \"page\": null,\n                \"active\": false\n            },\n            {\n                \"url\": \"http://127.0.0.1:8123/api/v1/payments?status=failed&method=credit_card&page=1\",\n                \"label\": \"1\",\n                \"page\": 1,\n                \"active\": true\n            },\n            {\n                \"url\": null,\n                \"label\": \"Next &raquo;\",\n                \"page\": null,\n                \"active\": false\n            }\n        ],\n        \"path\": \"http://127.0.0.1:8123/api/v1/payments\",\n        \"per_page\": 15,\n        \"to\": 1,\n        \"total\": 1\n    }\n}"
+                        },
+                        {
+                            "name": "Invalid filter (422)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/payments?status=refunded",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "payments"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "status",
+                                            "value": "refunded"
+                                        }
+                                    ]
+                                }
+                            },
+                            "status": "Unprocessable Content",
+                            "code": 422,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"The status filter must be one of: pending, successful, failed.\",\n    \"errors\": {\n        \"status\": [\n            \"The status filter must be one of: pending, successful, failed.\"\n        ]\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get payment",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/payments/{{payment_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "payments",
+                                "{{payment_id}}"
+                            ]
+                        },
+                        "description": "One payment. Another user's payment answers **404**."
+                    },
+                    "response": [
+                        {
+                            "name": "Payment (200)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/payments/2",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "payments",
+                                        "2"
+                                    ]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"data\": {\n        \"id\": 2,\n        \"order_id\": 1,\n        \"method\": \"credit_card\",\n        \"status\": \"successful\",\n        \"amount\": \"74.49\",\n        \"currency\": \"USD\",\n        \"transaction_reference\": \"ch_V241AZ6ODKQXWZ9MT6OO\",\n        \"failure_reason\": null,\n        \"details\": {\n            \"brand\": \"visa\",\n            \"last4\": \"4242\",\n            \"card_holder\": \"Jane Doe\"\n        },\n        \"processed_at\": \"2026-10-20T10:02:28+00:00\",\n        \"created_at\": \"2026-10-20T10:02:28+00:00\"\n    }\n}"
+                        },
+                        {
+                            "name": "Not found (404)",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/payments/9999",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "payments",
+                                        "9999"
+                                    ]
+                                }
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "_postman_previewlanguage": "json",
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message\": \"Payment not found.\"\n}"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
